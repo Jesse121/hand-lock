@@ -9,7 +9,6 @@
   <meta name="description" content="">
   <meta name="keywords" content="">
   <meta name="author" content="Jesse">
-  <meta name="email" content="jesse152@163.com">
   <link href="css/style.css" rel="stylesheet">
 </head>
 
@@ -21,28 +20,30 @@
     <div class="message">请输入手势密码</div>
     <div class="radio">
       <label>
-        <input type="radio" name="pass">设置手势密码</label>
+        <input type="radio" name="pass">设置手势密码
+      </label>
       <label>
         <input type="radio" name="pass">验证手势密码</label>
     </div>
   </div>
   <script src="js/handLock.js"></script>
   <script type="text/javascript">
-  var el = document.getElementById('handLock'),
-    info = el.getElementsByClassName('info')[0],
+  var ele = document.getElementById('handLock'),
+    info = ele.querySelector('.info'),
     select = document.getElementById('select'),
     message = select.getElementsByClassName('message')[0],
     radio = select.getElementsByClassName('radio')[0],
     setPass = radio.children[0].children[0],
     checkPass = radio.children[1].children[0];
-  new handLock({
-    el: el,
+
+  var handLock = new handLock({
+    ele: ele,
     info: info,
     message: message,
     setPass: setPass,
     checkPass: checkPass,
     n: 3
-  }).init();
+  });
   </script>
 </body>
 
