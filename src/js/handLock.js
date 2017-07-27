@@ -1,18 +1,21 @@
 (function(win){
   var handLock = function(option){
-    this.ele = option.ele || win.document.body;
-    this.n = (this.n >= 2 && this.n <= 5) ? option.n : 3; // 圆的个数
+    this.n = (option.n >= 2 && option.n <= 5) ? option.n : 3; // 圆的个数
     this.color = option.color || '#67ad65';
+    this.element = option.element; //
+
+    this.info = this.element.previousElementSibling;
+    this.message = this.element.firstChild.nodeType === 1 ? this.element.firstChild : this.element.firstChild.nextSibling;
     this.circles = [];// 用来存储 n*n 个 circle 的位置
     this.touchCircles = [];// 用来存储已经触摸到的所有 circle
     this.restCircles = [];// 还未触到的 circle
     this.touchFlag = false; // 用于判断是否 touch 到 circle
-    this.dom = {
-      info: option.info,
-      message: option.message,
-      setPass: option.setPass,
-      checkPass: option.checkPass
-    }
+    // this.dom = {
+    //   info: option.info,
+    //   message: option.message,
+    //   setPass: option.setPass,
+    //   checkPass: option.checkPass
+    // }
     this.reDraw = false; //表示是否需要重绘
     this.init();
   };
@@ -21,24 +24,24 @@
     init: function(){
       this.createCanvas();
       this.createCircles();
-      this.initPass();
+      this.initPassword();
       this.createListener();
     },
 
-    createCanvas: function(){ // 创建 canvas
+    createCanvas: function(){ 
       var width, elRect;
-      elRect = this.ele.getBoundingClientRect();
+      elRect = this.element.getBoundingClientRect();
       width = elRect.width < 300 ? 300 : elRect.width;
       var canvas = document.createElement('canvas');
       canvas.width = canvas.height = width;
-      this.ele.appendChild(canvas);
+      this.element.appendChild(canvas);
 
       var canvas2 = canvas.cloneNode(canvas, true);
       canvas2.style.position = 'absolute';
       canvas2.style.top = '0';
       canvas2.style.left = '0';
       canvas2.style.zIndex = "-1";
-      this.ele.appendChild(canvas2);
+      this.element.appendChild(canvas2);
 
       this.ctx = canvas.getContext('2d');
       this.canvas = canvas;
@@ -49,7 +52,7 @@
       this.canvas2 = canvas2;
     },
 
-    createCircles: function(){ // 画圆
+    createCircles: function(){
       var n = this.n;
       // 盒子的宽度 = (n+1)个空白间隔区域的宽度 + n个圆的宽度
       // this.width = (n+1)*2*this.r + n*2*this.r
@@ -68,61 +71,77 @@
       this.drawCircles();
     },
 
-    initPass: function(){ // 密码初始化
-      this.lsPass = win.localStorage.getItem('HandLockPass') ? {
-        model: 1,
-        pass: win.localStorage.getItem('HandLockPass').split('-') // 由于密码是字符串，要先转数组
-      } : { model: 2 };
-      this.updateMessage();
+    initPassword: function(){ 
+      this.lsPass = win.localStorage.getItem('Password') ? {
+        model: 2,
+        pass: win.localStorage.getItem('Password').split('-') // 由于密码是字符串，要先转数组
+      } : { model: 1 };
+      this.updateInfo();
+    },
+
+    updateInfo: function(){ // 根据当前模式，更新info
+      if(this.lsPass.model === 1){ // 1 表示初始化设置密码
+        // this.dom.setPass.checked = true;
+        this.info.innerHTML = '请设置手势密码';
+      }else if(this.lsPass.model == 2){ // 2 表示确认密码
+        // this.dom.checkPass.checked = true;
+        this.info.innerHTML = '再次输入以确认';
+      }else if(this.lsPass.model = 3){ // 3 表示验证密码
+        // this.dom.setPass.checked = true;
+        this.info.innerHTML = '请验证手势密码';
+      }
     },
 
     createListener: function(){ // 创建监听事件
       var self = this, temp, r = this.r, over = false;
       this.canvas.addEventListener('touchstart', function(e){
-        //self.do = 0;
-        //self.wantdo = 0;
-        var p = self.getTouchPos(e);
+        var p = self.getTouchPosition(e);
         self.restCircles = self.restCircles.concat(self.touchCircles.splice(0));
         self.judgePos(p);
-      }, false)
-      var t = this.throttle(function(e){
-        //this.do ++;
-        var p = this.getTouchPos(e);
+      }, false);
+      this.canvas.addEventListener('touchmove', this.throttle(function(e){
+        var p = this.getTouchPosition(e);
         if(this.touchFlag){
           this.update(p);
         }else{
           this.judgePos(p);
         }
-      }, 16, 16)
-      this.canvas.addEventListener('touchmove', t, false)
+      }, 16, 16), false);
       this.canvas.addEventListener('touchend', function(e){
-        //console.log('do: ' + self.do);
-        //console.log('wantdo: ' + self.wantdo);
         if(self.touchFlag){
           self.touchFlag = false;
-          self.checkPass();
+          self.checkPassword();
           self.restCircles = self.restCircles.concat(self.touchCircles.splice(0));// 将touchCircle 清空
           self.ctx2.clearRect(0, 0, this.width, this.width); // 提前做情况操作
           setTimeout(function(){
             self.reset();
           }, 400)
         }
-      }, false)
-      this.dom.setPass.addEventListener('click', function(e){
-        self.lsPass.model = 2;
-        self.updateMessage();
-        self.showInfo('请设置密码', 1000);
-      })
-      this.dom.checkPass.addEventListener('click', function(e){
-        if(self.lsPass.pass){
-          self.lsPass.model = 1;
-          self.updateMessage();
-          self.showInfo('请验证密码', 1000)
-        }else{
-          self.showInfo('请先设置密码', 1000);
-          self.updateMessage();
-        }
-      })
+      }, false);
+      // this.dom.setPass.addEventListener('click', function(e){
+      //   self.lsPass.model = 2;
+      //   self.updateInfo();
+      //   self.showInfo('请设置密码', 1000);
+      // })
+      // this.dom.checkPass.addEventListener('click', function(e){
+      //   if(self.lsPass.pass){
+      //     self.lsPass.model = 1;
+      //     self.updateInfo();
+      //     self.showInfo('请验证密码', 1000)
+      //   }else{
+      //     self.showInfo('请先设置密码', 1000);
+      //     self.updateInfo();
+      //   }
+      // })
+    },
+
+    getTouchPosition: function(e){ // 获得触摸点的相对位置
+      var rect = e.target.getBoundingClientRect();
+      var p = { // 相对坐标
+        x: e.touches[0].clientX - rect.left,
+        y: e.touches[0].clientY - rect.top
+      };
+      return p;
     },
 
     update: function(p){ // 更新 touchmove
@@ -135,23 +154,37 @@
       }
     },
 
-    checkPass: function(){ // 判断当前 model 和检查密码
-      var succ, model = this.lsPass.model;
-      if(model == 2){// 设置密码
+    judgePos: function(p){ // 判断 触点 是否在 circle 內
+      for(var i = 0; i < this.restCircles.length; i++){
+        temp = this.restCircles[i];
+        if(Math.abs(p.x - temp.x) < this.r && Math.abs(p.y - temp.y) < this.r){
+          this.touchCircles.push(temp);
+          this.restCircles.splice(i, 1);
+          this.touchFlag = true;
+          this.reDraw = true;
+          break;
+        }
+      }
+    },
+
+    checkPassword: function(){ // 判断当前模式和检查密码
+      var success, model = this.lsPass.model;
+
+      if(model === 1){// 设置密码
         if(this.touchCircles.length < 5){ // 验证密码长度
-          succ = false;
-          this.showInfo('密码长度至少为 5！', 1000);
+          success = false;
+          this.info.innerHTML = "至少连接5个点，请重新绘制";
         }else{
-          succ = true;
+          success = true;
           this.lsPass.temp = []; // 将密码放到临时区存储
           for(var i = 0; i < this.touchCircles.length; i++){
             this.lsPass.temp.push(this.touchCircles[i].id);
           }
-          this.lsPass.model = 3;
-          this.showInfo('请再次输入密码', 1000);
-          this.updateMessage();
+          this.lsPass.model = 2;
+          this.updateInfo();
+          this.showMessage('手势密码设置成功', 1000); //提示密码设置成功
         }
-      }else if(model == 3){ // 确认密码
+      }else if(model == 2){ // 确认密码
         var flag = true;
         // 先要验证密码是否正确
         if(this.touchCircles.length == this.lsPass.temp.length){
@@ -165,20 +198,20 @@
           flag = false;
         }
         if(!flag){
-          succ = false;
+          success = false;
           this.showInfo('两次密码不一致，请重新输入', 1000);
           this.lsPass.model = 2; // 由于密码不正确，重新回到 model 2
-          this.updateMessage();
+          this.updateInfo();
         }else{
-          succ = true; // 密码正确，localStorage 存储，并设置状态为 model 1
+          success = true; // 密码正确，localStorage 存储，并设置状态为 model 1
           win.localStorage.setItem('HandLockPass', this.lsPass.temp.join('-')); // 存储字符串
           this.showInfo('密码设置成功', 1000);
           this.lsPass.model = 1; 
           this.lsPass.pass = this.lsPass.temp;
-          this.updateMessage();
+          this.updateInfo();
         }
         delete this.lsPass.temp; // 很重要，一定要删掉，bug
-      }else if(model == 1){ // 验证密码
+      }else if(model == 3){ // 验证密码
         var tc = this.touchCircles, lp = this.lsPass.pass, flag = true;
         if(tc.length == lp.length){
           for(var i = 0; i < tc.length; i++){
@@ -190,19 +223,46 @@
           flag = false;
         }
         if(!flag){
-          succ = false;
+          success = false;
           this.showInfo('很遗憾，密码错误', 1000);
         }else{
-          succ = true;
+          success = true;
           this.showInfo('恭喜你，验证通过', 1000);
         }
       }
-      if(succ){
+
+      if(success){
         this.drawEndCircles('#2CFF26');// 绿色
       }else{
         this.drawEndCircles('red');// 红色
       }
     },
+
+    throttle: function(func, delay, mustRun){ // 节流函数
+      var timer, startTime = new Date(), self = this;
+      return function(e){
+        //self.wantdo ++;
+
+        /* 修复一个 bug，由于延迟导致的 preventDefault 失效 */
+        if(e){
+          e.preventDefault ? e.preventDefault() : null;
+          e.stopPropagation ? e.stopPropagation() : null;
+        }
+        var curTime = new Date(), args = arguments;
+        clearTimeout(timer);
+        if(curTime - startTime >= mustRun){
+          startTime = curTime;
+          func.apply(self, args);
+        }else{
+          timer = setTimeout(function(){
+            func.apply(self, args);
+          }, delay)
+        }
+      }
+    },
+
+
+
 
     drawCircles: function(){ // 画所有圆
       this.ctx.clearRect(0, 0, this.width, this.width); // 清空画布，为了防止重复画
@@ -280,78 +340,22 @@
       }
     },
 
-    getTouchPos: function(e){ // 获得触摸点的相对位置
-      var rect = e.target.getBoundingClientRect();
-      var p = { // 相对坐标
-        x: e.touches[0].clientX - rect.left,
-        y: e.touches[0].clientY - rect.top
-      };
-      return p;
-    },
-
-    judgePos: function(p){ // 判断 触点 是否在 circle 內
-      for(var i = 0; i < this.restCircles.length; i++){
-        temp = this.restCircles[i];
-        if(Math.abs(p.x - temp.x) < this.r && Math.abs(p.y - temp.y) < this.r){
-          this.touchCircles.push(temp);
-          this.restCircles.splice(i, 1);
-          this.touchFlag = true;
-          this.reDraw = true;
-          break;
-        }
-      }
-    },
-
     reset: function(){ // 重置 canvas
       this.drawCircles();
       this.ctx2.clearRect(0, 0, this.width, this.width); // 先清空
     },
 
-    updateMessage: function(){ // 根据当前模式，更新 dom
-      if(this.lsPass.model == 2){ // 2 表示设置密码
-        this.dom.setPass.checked = true;
-        this.dom.message.innerHTML = '请设置手势密码';
-      }else if(this.lsPass.model == 1){ // 1 表示验证密码
-        this.dom.checkPass.checked = true;
-        this.dom.message.innerHTML = '请验证手势密码';
-      }else if(this.lsPass.model = 3){ // 3 表示确认密码
-        this.dom.setPass.checked = true;
-        this.dom.message.innerHTML = '请再次输入密码';
-      }
-    },
-
-    showInfo: function(message, timer){ // 专门用来显示 info
-      clearTimeout(this.showInfo.timer);
-      var info = this.dom.info;
-      info.innerHTML = message;
+    showMessage: function(messageText, timer){ // 专门用来显示提示信息
+      clearTimeout(this.showMessage.timer);
+      var info = this.info;
+      info.innerHTML = messageText;
       info.style.display = 'block';
-      this.showInfo.timer = setTimeout(function(){
+      this.showMessage.timer = setTimeout(function(){
         info.style.display = '';
       }, timer || 1000)
-    },
-
-    throttle: function(func, delay, mustRun){ // 节流函数
-      var timer, startTime = new Date(), self = this;
-      return function(e){
-        //self.wantdo ++;
-
-        /* 修复一个 bug，由于延迟导致的 preventDefault 失效 */
-        if(e){
-          e.preventDefault ? e.preventDefault() : null;
-          e.stopPropagation ? e.stopPropagation() : null;
-        }
-        var curTime = new Date(), args = arguments;
-        clearTimeout(timer);
-        if(curTime - startTime >= mustRun){
-          startTime = curTime;
-          func.apply(self, args);
-        }else{
-          timer = setTimeout(function(){
-            func.apply(self, args);
-          }, delay)
-        }
-      }
     }
+
+    
   }
 
   win.handLock = handLock; // 赋给全局 window

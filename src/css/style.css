@@ -14,16 +14,21 @@ body {
   text-align: center;
 }
 
-#handLock {
+.info{
+  margin:30px auto 10px;
+}
+
+#canvas {
+  position: relative;
   width: 100%;
   height: auto;
   max-width: 500px;
   min-width: 300px;
   margin: 0 auto;
-  position: relative;
 }
 
-#handLock .info {
+.message {
+  display: none;
   position: absolute;
   left: 0;
   right: 0;
@@ -36,25 +41,9 @@ body {
   color: #f702ef;
   line-height: 50px;
   font-size: 22px;
-  border-radius: 50px;
-  display: none;
+  border-radius: 5px;
 }
 
-#handLock canvas {
+canvas {
   margin: 0 auto;
-}
-
-#select {
-  font-size: 20px;
-  font-weight: bold;
-}
-
-#select .message {
-  color: red;
-  padding: 0 10px;
-}
-
-#select .radio label {
-  display: block;
-  margin: 10px 0
 }
