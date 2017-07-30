@@ -1,26 +1,237 @@
-## H5 仿微信手势解锁
+### 仿微信手势解锁
 
 扫码在线查看：
 
 ![](imgs/url.png)
 
-首先，我要说明一下，对于这个项目，我是参考别人的，[H5HandLock](https://github.com/songjinzhong/H5HandLock)。
+最近一直想做个关于H5的小项目，在网上看到[H5HandLock](https://github.com/songjinzhong/H5HandLock)后，觉得这个和微信手势解锁挺像的，为何不做个类似微信手势解锁的小DEMO呢？于是说开搞就开搞，利用业余时间前前后后也花了3天。虽然是参考了别人的项目，但是弄明白之后还是学到了。
 
 #### 修改的地方
+因为我这个是模仿微信手势解锁，所以将部分内容改为和微信相似，这里涉及到以下内容：
 
+##### canvas1和canvas2    
+之前还不太明白为何要建立2个canvas，后来在设置密码画折线的时候才明白，我们需要一个canvas1画出圆和折线（已经划过的两圆之间），还需另外一个canvas2画出touchstart到touchend之间的折线
+```js
+createCanvas: function() {
+  var rectWidth = this.element.getBoundingClientRect().width,
+  width = rectWidth < 300 ? 300 : rectWidth;
 
+  var canvas1 = document.createElement('canvas');
+  canvas1.width = canvas1.height = width;
+  this.element.appendChild(canvas1);
 
+  var canvas2 = canvas1.cloneNode();
+  canvas2.style.cssText = "position:absolute;top:0;left:0;z-index:-1;";
+  this.element.appendChild(canvas2);
 
-我觉得一个比较合理的解法应该是利用 canvas 来实现，不知道有没有大神用 css 来实现。如果纯用 css 的话，可以将连线先设置 `display: none`，当手指划过的时候，显示出来。光设置这些应该就非常麻烦吧。
+  this.ctx1 = canvas1.getContext('2d');
+  this.canvas1 = canvas1;
+  this.width = width;
 
-之前了解过 canvas，但没有真正的写过，下面就来介绍我这几天学习 canvas 并实现 H5 手势解锁的过程。
+  this.ctx2 = canvas2.getContext('2d');
+  this.canvas2 = canvas2;
+}
+```
+##### 画圆   
+这里将两圆之间的空白区域的宽度设置为圆的直径的2/3，为了更贴近微信的效果，将大圆改为实心圆  
+```js
+createCircles: function() {
+  var n = 3; //大圆的个数
+  // 盒子的宽度 = (n+1)个空白间隔区域的宽度 + n个圆的宽度
+  // this.width = (n+1)*2/3*2*r + n*2*r
+  this.r = 3 * this.width / (4 + 10 * n);
+  for (var i = 0; i < n; i++) {
+    for (var j = 0; j < n; j++) {
+      var circlePos = {
+        x: j * 10 / 3 * this.r + 7 / 3 * this.r, //圆的x坐标
+        y: i * 10 / 3 * this.r + 7 / 3 * this.r, //圆的y坐标
+        id: i * 3 + j
+      }
+      this.circles.push(circlePos);
+      this.restCircles.push(circlePos);
+    }
+  }
+  this.drawCircles();
+},
+drawCircles: function() { // 画大圆
+  for (var i = 0, len = this.circles.length; i < len; i++) {
+    this.drawCircle(this.circles[i].x, this.circles[i].y);
+  }
+},
+drawCircle: function(x, y, color) { 
+  this.ctx1.strokeStyle = color || this.color;
+  this.ctx1.fillStyle = this.bgColor;//给圆填充背景色，遮盖canvas2上的折线
+  this.ctx1.lineWidth = 1;
+  this.ctx1.beginPath();
+  this.ctx1.arc(x, y, this.r, 0, Math.PI * 2, true); //0~2PI顺时针画圆弧
+  this.ctx1.closePath();
+  this.ctx1.fill(); 
+  this.ctx1.stroke();
+},
+```
+**初始化密码并更新状态**  
+判断localStorage中是否已存储密码来改变当前模式
+```js
+initPassword: function() {
+  this.setPassword = win.localStorage.getItem('HandLockPassword') ? {
+    model: 3,
+    text: win.localStorage.getItem('HandLockPassword').split('-') // 由于密码是字符串，要先转数组
+  } : { 
+    model: 1, 
+    text: [] 
+  };
+  this.updateInfo();
+},
 
-## 准备及布局设置
+updateInfo: function() { // 根据当前模式，更新info
+  if (this.redInfo) { //如果已存在红色提示信息，则将其设置为黑色
+    this.redInfo = false;
+    this.info.style.color = "#000";
+  }
+  if (this.setPassword.model === 1) { // 1 表示初始化设置密码
+    this.info.innerHTML = '请设置手势密码';
+  } else if (this.setPassword.model === 2) { // 2 表示确认密码
+    this.info.innerHTML = '再次输入以确认';
+  } else if (this.setPassword.model === 3) { // 3 表示验证密码
+    this.info.innerHTML = '请输入手势密码';
+  }
+},
+```
+##### 监听屏幕touch事件
+```js
+createListener: function() { // 创建监听事件
+  var self = this;
+  this.canvas1.addEventListener('touchstart', function(e) {
+    var p = self.getTouchPosition(e);//得到触点的坐标
+    self.judgePos(p);//判断触点是否在圆内
+  }, false);
+  this.canvas1.addEventListener('touchmove', this.throttle(function(e) {//运用了节流函数
+    var p = this.getTouchPosition(e);
+    if (this.touchFlag) {
+      this.update(p); //更新touchmove，画圆点和折线
+    } else {
+      this.judgePos(p);
+    }
+  }, 16, 16), false);
+  this.canvas1.addEventListener('touchend', function(e) {
+    if (self.touchFlag) {
+      self.touchFlag = false;
+      self.checkPassword();
+      self.restCircles = self.restCircles.concat(self.touchCircles.splice(0)); // 将resetCircles,touchCircles初始化
+      var timer = setTimeout(function() {
+        self.reset();//初始化画布
+        clearTimeout(timer);
+      }, 400);
+    }
+  }, false);
+}
+```
+##### 其他辅助函数
+还有一些辅助函数就不一一贴出代码了，介绍其中觉得比较重要的地方。  
+checkPassword函数主要用于根据当前模式来判断密码
+```js
+checkPassword: function() { // 判断当前模式和检查密码
+  var model = this.setPassword.model,
+  text      = this.setPassword.text,
+  success   = true,
+  tc        = this.touchCircles; //已经划过的圆
+  
+  var check = function(){
+    if (tc.length === text.length) { // 先要验证密码是否正确
+      for (var i = 0; i < tc.length; i++) {
+        if (tc[i].id != text[i]) {
+          success = false;
+        }
+      }
+    } else {
+      success = false;
+    }
+  };
 
-我这里用了一个比较常规的做法：
+  if (model === 1) { // 设置密码
+    if (tc.length < 5) { // 验证密码长度
+      this.showInfo("至少连接5个点，请重新绘制");
+    } else {
+      for (var i = 0; i < tc.length; i++) {
+        text.push(tc[i].id);//将元的id作为密码存入
+      }
+      this.setPassword.model = 2;
+      this.updateInfo();
+    }
+  } else if (model === 2) { // 确认密码
+    check();
 
+    if (success) {
+      win.localStorage.setItem('HandLockPassword', text.join('-')); // 密码正确，localStorage 存储
+      this.showMessage('手势密码设置成功', 1000);
+      this.setPassword.model = 3;
+      this.updateInfo();
+    } else {
+      this.showInfo('密码不一致，请重新设置');//红色动画提示信息
+      this.setPassword.model = 1; // 由于密码不正确，回到 model 1
+      this.setPassword.text = []; //清空之前的密码
+    }
+  } else if (model === 3) { // 验证密码
+    check();
+
+    if (success) {
+      this.showMessage('恭喜你，验证通过', 1000);
+      win.location = "http://www.jesse131.cn/blog/index.html"; //成功后跳转
+    } else {
+      this.showMessage('很遗憾，密码错误', 1000);
+    }
+  }
+},
+```
+drawLine函数主要用于画两大圆之间的连线，原例子中是采用两圆圆心之间的连线，为了贴近微信的效果将其改为两圆之间的连线（除去了圆心部分）
+```js
+drawLine: function() { // 画折线
+  var len = this.touchCircles.length;//获取已经划过的圆的个数
+  if (len >= 2) {
+    var x1 = this.touchCircles[len - 2].x;//获取最后划过的倒数第二个圆的圆心x坐标
+    var x2 = this.touchCircles[len - 1].x;//获取最后划过的倒数第一个圆的圆心x坐标
+    var y1 = this.touchCircles[len - 2].y;
+    var y2 = this.touchCircles[len - 1].y;
+    var o;//最后两圆之间连线的角度（弧度单位）
+    if (y1 >= y2) {
+      if (x2 >= x1) { //左上半部分
+        o = Math.atan((y1 - y2) / (x2 - x1));
+      } else {
+        o = Math.PI + Math.atan((y1 - y2) / (x2 - x1));
+      }
+    } else {
+      if (x2 >= x1) { //左下半部分
+        o = -Math.atan((y2 - y1) / (x2 - x1));
+      } else {
+        o = Math.PI - Math.atan((y2 - y1) / (x2 - x1));
+      }
+    }
+    var xn1 = x1 + this.r * Math.cos(o);
+    var yn1 = y1 - this.r * Math.sin(o);
+    var xn2 = x2 - this.r * Math.cos(o);
+    var yn2 = y2 + this.r * Math.sin(o);
+    this.ctx1.beginPath();
+    this.ctx1.lineWidth = 3;
+    this.ctx1.moveTo(xn1, yn1);
+    this.ctx1.lineTo(xn2, yn2);
+    this.ctx1.stroke();
+    this.ctx1.closePath();
+  }
+},
+```
+#### 有待改进的地方
+尽管手势解锁基本功能已实现，但仍有许多地方需要改进
+
+1. 对info红色动画提示信息的动画处理不够流畅，本打算用css3来写，但时间不好控制，后来又改为js；
+2.对例子中的节流函数理解不够透彻；
+3. 没有限制密码错误输入次数和忘记密码功能。
+
+#### 值得学习的地方
+
+##### 整体架构
+这里采用了新建handLock构造函数，并在其prototype属性上扩充各种方法。jQuery源码中方法的扩充也是采用这种方法
 ```javascript
-(function(w){
+(function(win){
   var handLock = function(option){}
 
   handLock.prototype = {
@@ -28,107 +239,22 @@
     ...
   }
 
-  w.handLock = handLock;
-})(window)
-
-// 使用
-new handLock({
-  el: document.getElementById('id'),
-  ...
-}).init();
+  win.handLock = handLock;
+})(window);
 ```
 
-传入的参数中要包含一个 dom 对象，会在这个 dom 对象內创建一个 canvas。当然还有一些其他的 dom 参数，比如 message，info 等。
 
-关于 css 的话，懒得去新建文件了，就直接內联了。
 
-## canvas
 
-### 1. 学习 canvas 并搞定画圆
 
-MDN 上面有个简易的教程，大致浏览了一下，感觉还行。[Canvas教程](https://developer.mozilla.org/zh-CN/docs/Web/API/Canvas_API/Tutorial)。
 
-先创建一个 `canvas`，然后设置其大小，并通过 `getContext` 方法获得绘画的上下文：
 
-```javascript
-var canvas = document.createElement('canvas');
-canvas.width = canvas.height = width;
-this.el.appendChild(canvas);
 
-this.ctx = canvas.getContext('2d');
-```
 
-然后呢，先画 `n*n` 个圆出来：
 
-```javascript
-createCircles: function(){
-  var ctx = this.ctx,
-    drawCircle = this.drawCircle,
-    n = this.n;
-  this.r = ctx.canvas.width / (2 + 4 * n) // 这里是参考的，感觉这种画圆的方式挺合理的，方方圆圆
-  r = this.r;
-  this.circles = []; // 用来存储圆心的位置
-  for(var i = 0; i < n; i++){
-    for(var j = 0; j < n; j++){
-      var p = {
-        x: j * 4 * r + 3 * r,
-        y: i * 4 * r + 3 * r,
-        id: i * 3 + j
-      }
-      this.circles.push(p);
-    }
-  }
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); // 为了防止重复画
-  this.circles.forEach(function(v){
-    drawCircle(ctx, v.x, v.y); // 画每个圆
-  })
-},
 
-drawCircle: function(ctx, x, y){ // 画圆函数
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(x, y, this.r, 0, Math.PI * 2, true);
-  ctx.closePath();
-  ctx.stroke();
-}
-```
 
-画圆函数，需要注意：如何确定圆的半径和每个圆的圆心坐标（这个我是参考的），如果以圆心为中点，每个圆上下左右各扩展一个半径的距离，同时为了防止四边太挤，四周在填充一个半径的距离。那么得到的半径就是 `width / ( 4 * n + 2)`，对应也可以算出每个圆所在的圆心坐标，也有一套公式，**GET**。
 
-### 2. 画线
-
-画线需要借助 touch event 来完成，也就是，当我们 `touchstart` 的时候，传入开始时的相对坐标，作为线的一端，当我们 `touchmove` 的时候，获得坐标，作为线的另一端，当我们 `touchend` 的时候，开始画线。
-
-这只是一个测试画线功能，具体的后面再进行修改。
-
-有两个函数，获得当前 touch 的相对坐标：
-
-```javascript
-getTouchPos: function(e){ // 获得触摸点的相对位置
-  var rect = e.target.getBoundingClientRect();
-  var p = { // 相对坐标
-    x: e.touches[0].clientX - rect.left,
-    y: e.touches[0].clientY - rect.top
-  };
-  return p;
-}
-```
-
-画线：
-
-```javascript
-drawLine: function(p1, p2){ // 画线
-  this.ctx.beginPath();
-  this.ctx.lineWidth = 3;
-  this.ctx.moveTo(p1.x, p2.y);
-  this.ctx.lineTo(p.x, p.y);
-  this.ctx.stroke();
-  this.ctx.closePath();
-},
-```
-
-然后就是监听 canvas 的 `touchstart`、`touchmove`、和 `touchend` 事件了。
 
 ### 3. 画折线
 
@@ -164,80 +290,11 @@ judgePos: function(p){ // 判断 触点 是否在 circle 內
 }
 ```
 
-### 4. 标记已画
 
-前面已经说了，我们把已经 touch 的点（圆）放到数组中，这个时候需要将这些已经 touch 的点给标记一下，在圆心处画一个小实心圆：
 
-```javascript
-drawPoints: function(){
-  for (var i = 0 ; i < this.touchCircles.length ; i++) {
-    this.ctx.fillStyle = '#FFFFFF';
-    this.ctx.beginPath();
-    this.ctx.arc(this.touchCircles[i].x, this.touchCircles[i].y, this.r / 2, 0, Math.PI * 2, true);
-    this.ctx.closePath();
-    this.ctx.fill();
-  }
-}
-```
 
-同时添加一个 reset 函数，当 touchend 的时候调用，400ms 调用 reset 重置 canvas。
 
-到现在为止，一个 H5 手势解锁的简易版已经基本完成。
 
-## password
-
-为了要实现记住和重置密码的功能，把 password 保存在 localStorage 中，但首先要添加必要的 html 和样式。
-
-### 1. 添加 message 和 单选框
-
-为了尽可能的使界面简洁（越丑越好），直接在 body 后面添加了：
-
-```html
-<div id="select">
-  <div class="message">请输入手势密码</div>
-  <div class="radio">
-    <label><input type="radio" name="pass">设置手势密码</label>
-    <label><input type="radio" name="pass">验证手势密码</label>
-  </div>
-</div>
-```
-
-将添加到 dom 已 option 的形式传给 handLock：
-
-```javascript
-var el = document.getElementById('handlock'),
-  info = el.getElementsByClassName('info')[0],
-  select = document.getElementById('select'),
-  message = select.getElementsByClassName('message')[0],
-  radio = select.getElementsByClassName('radio')[0],
-  setPass = radio.children[0].children[0],
-  checkPass = radio.children[1].children[0];
-new handLock({
-  el: el,
-  info: info,
-  message: message,
-  setPass: setPass,
-  checkPass: checkPass,
-  n: 3
-}).init();
-```
-
-### 2. info 信息显示
-
-关于 info 信息显示，自己写了一个悬浮窗，然后默认为 `display: none`，然后写了一个 `showInfo` 函数用来显示提示信息，直接调用：
-
-```javascript
-showInfo: function(message, timer){ // 专门用来显示 info
-  var info = this.dom.info;
-  info.innerHTML = message;
-  info.style.display = 'block';
-  setTimeout(function(){
-    info.style.display = '';
-  }, 1000)
-}
-```
-
-关于 info 的样式，在 html 中呢。
 
 ### 3. 关于密码
 
@@ -249,9 +306,8 @@ showInfo: function(message, timer){ // 专门用来显示 info
 
 >model：3 设置密码二次验证
 
-具体看下面这个图：
 
-![](imgs/llc.jpeg)
+
 
 这三种 model ，只要处理好它们之间如何跳转就 ok 了，即状态的改变。
 
@@ -280,174 +336,6 @@ updateMessage: function(){ // 根据当前模式，更新 dom
 },
 ```
 
-有必要再来介绍一下 lsPass 的格式：
-
-```javascript
-this.lsPass = {
-  model：1, // 表示当前的模式
-  pass: [0, 1, 2, 4, 5] // 表示当前的密码，可能不存在
-}
-```
-
-因为之前已经有了一个基本的实现框架，现在只需要在 touchend 之后，写一个函数，功能就是先对当前的 model 进行判断，实现对应的功能，这里要用到 touchCircles 数组，表示密码的顺序：
-
-```javascript
-checkPass: function(){
-  var succ, model = this.lsPass.model; //succ 以后会用到
-  if(model == 2){ // 设置密码
-    if(this.touchCircles.length < 5){ // 验证密码长度
-      succ = false;
-      this.showInfo('密码长度至少为 5！', 1000);
-    }else{
-      succ = true;
-      this.lsPass.temp = []; // 将密码放到临时区存储
-      for(var i = 0; i < this.touchCircles.length; i++){
-        this.lsPass.temp.push(this.touchCircles[i].id);
-      }
-      this.lsPass.model = 3;
-      this.showInfo('请再次输入密码', 1000);
-      this.updateMessage();
-    }
-  }else if(model == 3){// 确认密码
-    var flag = true;
-    // 先要验证密码是否正确
-    if(this.touchCircles.length == this.lsPass.temp.length){
-      var tc = this.touchCircles, lt = this.lsPass.temp;
-      for(var i = 0; i < tc.length; i++){
-        if(tc[i].id != lt[i]){
-          flag = false;
-        }
-      }
-    }else{
-      flag = false;
-    }
-    if(!flag){
-      succ = false;
-      this.showInfo('两次密码不一致，请重新输入', 1000);
-      this.lsPass.model = 2; // 由于密码不正确，重新回到 model 2
-      this.updateMessage();
-    }else{
-      succ = true; // 密码正确，localStorage 存储，并设置状态为 model 1
-      w.localStorage.setItem('HandLockPass', this.lsPass.temp.join('-')); // 存储字符串
-      this.lsPass.model = 1; 
-      this.lsPass.pass = this.lsPass.temp;
-      this.updateMessage();
-    }
-    delete this.lsPass.temp; // 很重要，一定要删掉，bug
-  }else if(model == 1){ // 验证密码
-    var tc = this.touchCircles, lp = this.lsPass.pass, flag = true;
-    if(tc.length == lp.length){
-      for(var i = 0; i < tc.length; i++){
-        if(tc[i].id != lp[i]){
-          flag = false;
-        }
-      }
-    }else{
-      flag = false;
-    }
-    if(!flag){
-      succ = false;
-      this.showInfo('很遗憾，密码错误', 1000);
-    }else{
-      succ = true;
-      this.showInfo('恭喜你，验证通过', 1000);
-    }
-  }
-},
-```
-
-密码的设置要参考前面那张图，要时刻警惕状态的改变。
-
-### 4. 手动重置密码
-
-思路也很简单，就是添加点击事件，点击之后，改变 model 即可，点击事件如下：
-
-```javascript
-this.dom.setPass.addEventListener('click', function(e){
-  self.lsPass.model = 2; // 改变 model 为设置密码
-  self.updateMessage(); // 更新 message
-  self.showInfo('请设置密码', 1000);
-})
-this.dom.checkPass.addEventListener('click', function(e){
-  if(self.lsPass.pass){
-    self.lsPass.model = 1;
-    self.updateMessage();
-    self.showInfo('请验证密码', 1000)
-  }else{
-    self.showInfo('请先设置密码', 1000);
-    self.updateMessage();
-  }
-})
-```
-
-**ps：这里面还有几个小的 bug**，因为 model 只有 3 个，所以设置的时候，当点击重置密码的时候，没有设置密码成功，又切成验证密码状态，此时无法提升沿用旧密码，原因是 **model 只有三个**。
-
-### 5. 添加 touchend 颜色变化
-
-实现这个基本上就大功告成了，这个功能最主要的是给用户一个提醒，若用户划出的密码符合规范，显示绿色，若不符合规范或错误，显示红色警告。
-
-因为之前已经设置了一个 succ 变量，专门用于重绘。
-
-```javascript
-drawEndCircles: function(color){ // end 时重绘已经 touch 的圆
-  for(var i = 0; i < this.touchCircles.length; i++){
-    this.drawCircle(this.touchCircles[i].x, this.touchCircles[i].y, color);
-  }
-},
-
-// 调用
-if(succ){
-  this.drawEndCircles('#2CFF26'); // 绿色
-}else{
-  this.drawEndCircles('red'); // 红色
-}
-```
-
-那么，一个可以演示的版本就生成了，尽管还存在一些 bug，随后会来解决。（详情分支 password）
-
-## 一些 bugs
-
-有些 bugs 在做的时候就发现了，一些 bug 后来用手机测试的时候才发现，比如，我用 chrome 的时候，没有察觉这个 bug，当我用 android 手机 chrome 浏览器测试的时候，发现当我 touchmove 向下的时候，会触发浏览器的下拉刷新，解决办法：加了一个 `preventDefault`，没想到居然成功了。
-
-```javascript
-this.canvas.addEventListener('touchmove', function(e){
-  e.preventDefault ? e.preventDefault() : null;
-  var p = self.getTouchPos(e);
-  if(self.touchFlag){
-    self.update(p);
-  }else{
-    self.judgePos(p);
-  }
-}, false)
-```
-
-### 关于 showInfo 
-
-由于showInfo 中有 setTimeout 函数，可以看到函数里的演出为 1s，导致如果我们操作的速度比较快，在 1s 内连续 show 了很多个 info，后面的 info 会被第一个 info 的 setTimeout 弄乱，显示的时间小于 1s，或更短。比如，当重复点击设置手势密码和验证手势密码，会产生这个 bug。
-
-解决办法有两个，一个是增加一个专门用于显示的数组，每次从数组中取值然后显示。另一种解题思路和防抖动的思路很像，就是当有一个新的 show 到来时，把之前的那个 setTimeout 清除掉。
-
-这里采用第二种思路：
-
-```javascript
-showInfo: function(message, timer){ // 专门用来显示 info
-  clearTimeout(this.showInfo.timer);
-  var info = this.dom.info;
-  info.innerHTML = message;
-  info.style.display = 'block';
-  this.showInfo.timer = setTimeout(function(){
-    info.style.display = '';
-  }, timer || 1000)
-},
-```
-
-### 解决小尾巴
-
-所谓的小尾巴，如下：
-
-![](imgs/p5.jpeg)
-
-解决办法也很简单，在 touchend 的时候，先进行 `clearRect` 就 ok 了。
 
 ## 关于优化
 
@@ -607,16 +495,7 @@ throttle: function(func, delay, mustRun){
 }
 ```
 
-## 总结
 
-大概花了三天左右的时间，将这个 H5 的手势解锁给完成，自己还是比较满意的，虽然可能达不到评委老师的认可，不过自己在做的过程中，学习到了很多新知识。
+#### 参考
 
-## 参考
-
->[H5lock](https://github.com/lvming6816077/H5lock)
-
->[Canvas教程](https://developer.mozilla.org/zh-CN/docs/Web/API/Canvas_API/Tutorial)
-
->[js获取单选框里面的值](http://www.cnblogs.com/wangkongming/archive/2013/08/30/3291081.html)
-
->[前端高性能滚动 scroll 及页面渲染优化](http://www.codeceo.com/article/web-high-performance-scroll.html)
+>[H5HandLock](https://github.com/songjinzhong/H5HandLock)

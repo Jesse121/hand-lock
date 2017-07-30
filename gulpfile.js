@@ -21,7 +21,7 @@ gulp.task('webserver', function() {
   gulp.src('./src/')
     .pipe(webserver({
       //域名 推荐写内网IP方便手机端同步调试，默认localhost
-      host: '14.15.8.11',
+      host: '14.15.8.88',
       //端口 随机生成端口，方便多项目调试
       port: 3000 + Math.ceil(Math.random() * 9),
       //自动开启浏览器
