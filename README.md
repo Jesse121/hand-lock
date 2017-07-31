@@ -2,7 +2,7 @@
 
 扫码在线查看：
 
-![](imgs/url.png)
+![仿微信手势解锁二维码](http://o8l2fza1x.bkt.clouddn.com/hand-lock.png)
 
 最近一直想做个关于H5的小项目，在网上看到[H5HandLock](https://github.com/songjinzhong/H5HandLock)后，觉得这个和微信手势解锁挺像的，为何不做个类似微信手势解锁的小DEMO呢？于是说开搞就开搞，利用业余时间前前后后也花了3天。虽然是参考了别人的项目，但是弄明白之后还是学到了。
 
