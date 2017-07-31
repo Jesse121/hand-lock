@@ -180,7 +180,7 @@
         } else {
           this.showInfo('密码不一致，请重新设置');
           this.setPassword.model = 1; // 由于密码不正确，回到 model 1
-          this.setPassword.text = []; //清空之前的密码
+          text.length = 0; //清空之前的密码
         }
       } else if (model === 3) { // 验证密码
         check();
