@@ -174,7 +174,7 @@
         check();
         if (success) {
           win.localStorage.setItem('HandLockPassword', text.join('-')); // 密码正确，localStorage 存储
-          this.showMessage('手势密码设置成功', 1000);
+          this.showMessage('手势密码设置成功');
           this.setPassword.model = 3;
           this.updateInfo();
         } else {
@@ -185,10 +185,12 @@
       } else if (model === 3) { // 验证密码
         check();
         if (success) {
-          this.showMessage('恭喜你，验证通过', 1000);
-          win.location = "http://www.jesse131.cn/blog/index.html"; //成功后跳转
+          this.showMessage('恭喜你，验证通过',function() {
+            this.message.style.display = 'none';
+            win.location = "http://www.jesse131.cn/blog/index.html"; //成功后跳转
+          }.bind(this));
         } else {
-          this.showMessage('很遗憾，密码错误', 1000);
+          this.showMessage('很遗憾，密码错误');
         }
       }
     },
@@ -328,14 +330,14 @@
       }, 10);
     },
 
-    showMessage: function(messageText, timer) { // 显示提示信息
+    showMessage: function(messageText, func,timer) { // 显示提示信息
       clearTimeout(this.showMessage.timer);
       var message = this.message;
       message.innerHTML = messageText;
       message.style.display = 'block';
-      this.showMessage.timer = setTimeout(function() {
+      this.showMessage.timer = setTimeout(func || function() {
         message.style.display = 'none';
-      }, timer || 1000)
+      }, timer || 500)
     }
 
 
